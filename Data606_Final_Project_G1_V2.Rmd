@@ -1,0 +1,628 @@
+---
+title: "Data606-Final Project"
+output: html_notebook
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+### Introduction
+
+### Objective
+
+#### Install.packages
+
+```{r}
+#install.packages('')
+```
+
+### Dateset and Importing neccessary libraries
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(mosaic)
+library(survey)
+library(MASS)
+library(mlbench)
+library(sampling)
+library(klaR)
+library(car)
+library(QuantPsyc)
+library(energy)
+library(vcd)
+library(pROC)
+```
+
+#### Importing data
+
+```{r}
+#Monica
+stroke_data=read.csv("healthcare-dataset-stroke-data.csv")
+#Niloofar
+##stroke_data=read.csv("/healthcare-dataset-stroke-data.csv")
+#Ashique
+##stroke_data=read.csv("/healthcare-dataset-stroke-data.csv")
+#Ali
+#stroke_data=read.csv("E:/UoC/DATA606/Project/healthcare-dataset-stroke-data.csv")
+```
+
+#### In this step, we check the dimension of the dataset, looking into a summary of the dataset and its columns. Also, we count the NA values in each column. Then we perform data preprocessing before any analysis.
+
+```{r}
+#Checking the dimension of the dataset and column names
+cat("This dataset contains",dim(stroke_data)[1],"rows",dim(stroke_data)[2],"columns\n\n")
+
+cat("The Columns names are:\n\n")
+names(stroke_data)
+```
+
+As we can see, there are twelve columns and 5110 rows.
+"id" is a unique identifier of each row, and it is useful for taking samples.
+Gender, hypertension, heart_disease, ever_married, work_type, Residence_type, smoking_status, and stroke, which is the response variable, are all qualitative.
+Other remaining variables including avg_glucose_level and BMI are quantitative.
+
+Before finding the unique categories in each column, we are looking at the NA values.
+
+```{r}
+#Finding NA values in the dataset
+
+NA_count <- colSums(is.na(stroke_data))
+
+# Displaying the result
+print(NA_count)
+```
+
+#### There is no sign of na values in the dataset, but if we carefully look at the bmi column, there are some 'N/A' as strings.
+
+```{r}
+#Removing other form the gender column:
+stroke_data <- subset(stroke_data, gender != 'Other')
+```
+
+```{r}
+for (col in names(stroke_data)){
+  cat("The number of N/A values in column",col,"is", sum((stroke_data[,col]=='N/A')),"\n")
+}
+```
+
+Based on the above results, there are 201 'N/A' values in the bmi column, which is roughly 4% of the records in the dataset.
+However, there are 40 stroke with value 1 among bmi records with NA values.
+Since the total number of strokes are 209, it is better to fill N/A values with a proper value to have more stroke data.
+
+```{r}
+stroke_data$bmi<-as.numeric(stroke_data$bmi)
+```
+
+#### Filling NA values with the mean of the bmi column. It is reasonable to replace NA with mean in the bmi column since it is the variable that depend on height and weight of individuals. So, it is expected to follow the normal distribution naturally.
+
+```{r}
+mean_value <- mean(stroke_data$bmi, na.rm = TRUE)
+stroke_data$bmi[is.na(stroke_data$bmi)] <- mean_value
+```
+
+#### In this stage, we identify the unique categories in each of the qualitative columns in this dataset.
+
+```{r}
+categorical_columns=c("gender","hypertension","heart_disease",
+                      "ever_married","work_type","Residence_type","smoking_status","stroke")
+for (col in categorical_columns){
+  cat("\n\nSummary of categories in",col,"is:\n")
+  print(table(stroke_data[,col]))
+}
+
+```
+
+Based on the summary results, we can observe how r dummifies the binary variables in the columns hypertension, heart_disease, and stroke.
+In these columns, 0 represents not experiencing each of them, while 1 shows the opposite.
+For the rest of the qualitative columns, whether they are binary or not, the classes and the frequency of each class are summarized.
+
+#### Exploratory Data Analysis
+
+The distribution of patients with and without the stroke and without stroke: Out of a total of 5,109 patients, only 249 have experienced a stroke, making up approximately 4.9% of the dataset.
+In contrast, 4,860 patients, representing about 95.1% of the data, have never had a stroke.
+
+```{r}
+ggplot(stroke_data, aes(x = factor(stroke), fill = factor(stroke))) + 
+  geom_bar() + 
+  labs(title = "Distribution of People with Stroke and without Stroke",
+       x = "Stroke Status",
+       y = "Count") +
+  scale_x_discrete(labels = c("No Stroke", "Stroke")) +
+  scale_fill_discrete(name = "Stroke", labels = c("No Stroke", "Stroke")) +
+  theme_minimal()
+
+```
+
+The distribution of patients with and without the stroke with respect to hypertension, heart_disease, avg_glucose_level and smoking_status conditions
+
+```{r}
+# Age distribution
+ggplot(stroke_data, aes(x = factor(stroke), y = age, fill = factor(stroke))) +
+  geom_boxplot() +
+  labs(title = "Distribution of Age with Respect to Stroke",
+       x = "Stroke Status",
+       y = "Age") +
+  scale_x_discrete(name = "Stroke Status", labels = c("No Stroke", "Stroke")) +
+  theme_minimal()
+
+
+# Stroke by gender
+ggplot(stroke_data, aes(x = gender, fill = as.factor(stroke))) +
+  geom_bar(position = "dodge") +
+  theme_minimal() +
+  xlab("Gender") +
+  ylab("Frequency") +
+  ggtitle("Stroke Incidence by Gender") +
+  scale_fill_discrete(name = "Stroke", labels = c("No", "Yes"))
+
+# Hypertension
+ggplot(stroke_data, aes(x = factor(hypertension), fill = factor(stroke))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Distribution of Stroke with Respect to Hypertension",
+       x = "Hypertension Status",
+       y = "Count") +
+  scale_x_discrete(labels = c("No Hypertension", "Hypertension")) +
+  scale_fill_discrete(name = "Stroke Status", labels = c("No Stroke", "Stroke")) +
+  theme_minimal()
+
+# Heart Disease
+ggplot(stroke_data, aes(x = factor(heart_disease), fill = factor(stroke))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Distribution of Stroke with Respect to Heart Disease",
+       x = "Heart Disease Status",
+       y = "Count") +
+  scale_x_discrete(labels = c("No Heart Disease", "Heart Disease")) +
+  scale_fill_discrete(name = "Stroke Status", labels = c("No Stroke", "Stroke")) +
+  theme_minimal()
+
+# Average Glucose Level
+ggplot(stroke_data, aes(x = factor(stroke), y = avg_glucose_level, fill = factor(stroke))) +
+  geom_boxplot() +
+  labs(title = "Distribution of Average Glucose Level with Respect to Stroke",
+       x = "Stroke Status",
+       y = "Average Glucose Level") +
+  scale_x_discrete(name = "Stroke Status", labels = c("No Stroke", "Stroke")) +
+  theme_minimal()
+
+# Smoking Status
+ggplot(stroke_data, aes(x = smoking_status, fill = factor(stroke))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Distribution of Stroke with Respect to Smoking Status",
+       x = "Smoking Status",
+       y = "Count") +
+  scale_fill_discrete(name = "Stroke Status", labels = c("No Stroke", "Stroke")) +
+  theme_minimal()
+
+```
+
+The age distribution of patients in the dataset shows a broad range, indicating that strokes can occur across different age groups. However, there seems to be a higher incidence of strokes in certain age brackets, particularly for individuals aged 60-80. This suggests that specific attention may be needed in these age groups for stroke prediction and prevention.
+
+The relationship between gender and stroke incidence shows slight variations, indicating that there may be differences in susceptibility or exposure to risk factors between males and females.
+Gender could potentially play a crucial role in stroke prediction and prevention strategies.
+
+The higher incidence of strokes among individuals with hypertension highlights the well-established link between this condition and the risk of stroke.
+This emphasizes the importance of controlling hypertension as a means of reducing stroke risk.
+
+No noticeable trends are observed in terms of strokes among individuals with heart disease.
+While heart disease is a known risk factor for stroke, further analysis may be needed to explore the specific relationship in this dataset.
+
+Interestingly, the distribution of average glucose levels with respect to stroke indicates a potential relationship.Patients with stroke might demonstrate different patterns in their glucose levels compared to those without stroke.This might underscore the relevance of regular monitoring and control of blood sugar levels in stroke prevention.
+
+It is also revealed that the incidence of stroke appears to be higher among individuals who formerly smoked or never smoked compared to those who currently smoke or have an unknown smoking status.
+This finding emphasizes the significance of tobacco control strategies in reducing the burden of stroke.
+I
+
+In summary, our exploratory data analysis reveals multiple factors that might be associated with stroke risk.
+Further in-depth analysis would be beneficial in determining the specific role and magnitude of these factors in contributing to stroke risk.
+
+#### Spliting data into training and test set to build a model.
+
+```{r}
+#Removing id columns from the dataset
+stroke_data <- stroke_data[, -which(names(stroke_data) %in% c("id"))]
+```
+
+We have 5055 records (4860 without stroke and 249 with stroke).
+Now we are going to draw a sample using stratified sampling to split the data into train and test split:
+
+```{r}
+#checking the order of 0s and 1s in the dataset
+unique(stroke_data$stroke)
+```
+
+```{r}
+dim(stroke_data)
+table(stroke_data$stroke)
+```
+
+```{r}
+#Drawing 3880 "0" and 198 "1" from the "stroke" column, the train set will be including around 80% of the total data. The ratio of Stroke/no-Stroke in the entire dataset and both splits are almost the same.
+set.seed(2500)
+stroke_idx=sampling:::strata(data=stroke_data,stratanames = c("stroke"),size=c(198,3880),method="srswor")
+
+#Creating the test and train data based on the criteria
+stroke_test=stroke_data[-stroke_idx$ID_unit,]
+stroke_train=stroke_data[stroke_idx$ID_unit,]
+```
+
+```{r}
+# Count the instances in each stratum
+#strata_counts <- table(stroke_data$stroke)
+#set.seed(2500)
+#stroke_idx <- sampling::strata(data=stroke_data, stratanames = c("stroke"), size=c(187,3654), method="srswor")
+
+#Creating the test and train data based on the criteria
+#stroke_train <- stroke_data[stroke_idx$ID_unit,]
+#stroke_test <- stroke_data[-stroke_idx$ID_unit,]
+```
+
+
+#### Checking multicollinearity:
+
+Before using a generalized linear model or LDA, it is better to search for multicollinearity between the predictors.
+Here we have a simple test from the car library.
+Multicollinearity will reduce the stability of the glm model.
+So, before creating any model, we check for the existence of this condition.
+
+#### Conducting VIF test to check for multicollinearity
+
+***Null Hypothesis (H0):*** There is no multicollinearity among the predictors in the dataset.
+
+***Alternative Hypothesis (H1):*** There is multicollinearity among the predictors in the dataset.
+
+```{r}
+Stroke_LRM_model_1<-glm(stroke~., family=binomial, data=stroke_data)
+car::vif(Stroke_LRM_model_1)
+```
+
+Using the whole dataset, we observed no sign of multicollinearity, since the result of the VIF test does not show any number greater than 5, or better to say, all of the VIF factors are less than 1.5.
+We can assume that the correlations between the predictor do not affect the stability of the model.
+The last column of the VIF test (GVIF\^(1/(2\*Df))) accounts for the different categories in attributes, and it is kind of a standardized value for this test.
+
+#### Logestic Regression Model
+
+We aim to predict whether a patient will have a stroke or not based on the input parameters like gender, age, hypertension, heart disease, ever married, work type, residence type, average glucose level, body mass index (BMI), and smoking status.
+
+***Null Hypothesis (H0):*** None of predictor variables (gender, age, hypertension, heart disease, ever_married, work_type, Residence_type, avg_glucose_level, bmi, smoking_status) have an effect on the outcome variable (stroke).
+
+***Alternative Hypothesis (H1):*** At least one of the predictor variables (gender, age, hypertension, heart disease, ever_married, work_type, Residence_type, avg_glucose_level, bmi, smoking_status) is significantly associated with the outcome variable (stroke).
+
+```{r}
+#Converting categorical variables to factors for the trian set
+stroke_train$gender <- as.factor(stroke_train$gender)
+stroke_train$ever_married <- as.factor(stroke_train$ever_married)
+stroke_train$work_type <- as.factor(stroke_train$work_type)
+stroke_train$Residence_type <- as.factor(stroke_train$Residence_type)
+stroke_train$smoking_status <- as.factor(stroke_train$smoking_status)
+stroke_train$stroke <- as.factor(stroke_train$stroke)
+```
+
+```{r}
+#Making sure that r dummifies them correctly
+contrasts(stroke_train$smoking_status)
+```
+
+##### Building a model using the training set.
+
+```{r}
+stroke_glm_model <- glm(stroke ~ ., family = binomial, data = stroke_train)
+summary(stroke_glm_model)
+
+```
+
+#### Summary of the logistic regression model:
+
+The logistic regression model was built using the 'stroke_train' dataset to predict the likelihood of having a stroke.The model summary provides evidence against the null hypothesis and supports the alternative hypothesis, indicating a significant association between certain predictor variables and the likelihood of having a stroke.
+
+The intercept term represents the log-odds of having a stroke when all other predictors are zero.
+The coefficients for the remaining variables indicate the change in log-odds of having a stroke associated with a one-unit increase in each predictor variable.
+
+Based on the summary output, the following conclusions can be drawn:
+
+-   The variable 'age' has a significant positive effect on the probability of having a stroke.
+    As the age increases, the log-odds of having a stroke also increase.
+
+-   The variable 'hypertension' is significant and positively associated with the probability of having a stroke.
+    Individuals with hypertension have higher log-odds of having a stroke compared to those without hypertension.
+
+-   The variable 'avg_glucose_level' is also significant and positively related to the probability of having a stroke.
+    Higher average glucose levels are associated with increased log-odds of having a stroke.
+
+However, other variables such as 'gender', 'heart_disease', 'ever_married', 'work_type', 'Residence_type', 'bmi', and 'smoking_status' do not appear to have a significant effect on the probability of having a stroke based on this model.
+
+#### Using GLM model to predict stroke status in the test set
+
+```{r}
+#Converting categorical variables to factors for the test set
+stroke_test$gender <- as.factor(stroke_test$gender)
+stroke_test$ever_married <- as.factor(stroke_test$ever_married)
+stroke_test$work_type <- as.factor(stroke_test$work_type)
+stroke_test$Residence_type <- as.factor(stroke_test$Residence_type)
+stroke_test$smoking_status <- as.factor(stroke_test$smoking_status)
+stroke_test$stroke <- as.factor(stroke_test$stroke)
+```
+
+```{r}
+stroke_pred_prob <- predict(stroke_glm_model, newdata = stroke_test, type = "response")
+```
+
+#### Since the outcome of a logistic regression is a probability, we need to convert these probabilities to a binary outcome. Using 0.5 as the cut-off for the same.
+
+```{r}
+stroke_pred <- ifelse(stroke_pred_prob > 0.5, 1, 0)
+```
+
+#### Creating a confusion matrix and calculating the misclassification rate.
+
+```{r}
+conf_matrix <- table(Predicted = stroke_pred, Actual = stroke_test$stroke)
+print(conf_matrix)
+
+misclassification_rate_glm_full <- 1 - sum(diag(conf_matrix)) / sum(conf_matrix)
+print(paste("Misclassification Rate: ", round(misclassification_rate_glm_full * 100, 2), "%"))
+
+```
+
+Upon applying the model to the 'stroke_test' dataset, we predict stroke occurrences and compare these predictions to the actual values to assess the model's performance.
+
+The confusion matrix gives a count of correct and incorrect predictions.
+In our case, it correctly identified 980 cases without a stroke, and misclassified 50 actual stroke cases as non-stroke.
+The model correctly predicted one case with a stroke.
+
+The misclassification rate, calculated from the confusion matrix, is 4.85%.
+This means that approximately 4.85% of the total predictions were incorrect.
+
+While this rate seems fairly low, it's important to consider that in medical scenarios like this, false negatives (incorrectly predicting no stroke when there actually is one) can have serious health implications.Therefore, improving the model's sensitivity to accurately predict stroke occurrences is critical.
+
+#### Reduced Logistic Regression Model
+
+When a logistic regression model includes too many predictors, some of which are not statistically significant, it can lead to overfitting.
+This situation often results in the model performing well on training data but poorly on new, unseen data.
+Consequently, reducing the model by removing non-significant predictors can help to mitigate overfitting and improve the model's generalizability.
+
+In the context of the above full model, the variables 'gender', 'ever_married', 'work_type', 'Residence_type', 'bmi', and 'smoking_status' have p-values greater than 0.05, indicating that they are not statistically significant predictors.
+These variables can therefore be excluded to form a reduced model.
+
+```{r}
+# Reduced logistic regression model
+stroke_glm_model_reduced <- glm(stroke ~ age + hypertension + avg_glucose_level, family = binomial, data = stroke_train)
+summary(stroke_glm_model_reduced)
+
+```
+
+#### Using Reduced GLM model to predict stroke status in the test set
+
+Since the outcome of a logistic regression is a probability, we need to convert these probabilities to a binary outcome.
+Using 0.5 as the cut-off for the same.
+
+```{r}
+stroke_pred_prob_reduced <- predict(stroke_glm_reduced_model, newdata = stroke_test, type = "response")
+stroke_pred_reduced <- ifelse(stroke_pred_prob_reduced > 0.5, 1, 0)
+
+```
+
+#### Creating a confusion matrix and calculating the misclassification rate for Reduced GLM model.
+
+```{r}
+conf_matrix <- table(Predicted = stroke_pred_reduced, Actual = stroke_test$stroke)
+print(conf_matrix)
+
+misclassification_rate_glm_full <- 1 - sum(diag(conf_matrix)) / sum(conf_matrix)
+print(paste("Misclassification Rate: ", round(misclassification_rate_glm_full * 100, 2), "%"))
+
+
+```
+
+The reduced logistic regression model, which includes age, hypertension, work type, and average glucose level as significant predictors, achieves a misclassification rate of 4.95% on the test set.
+This indicates that approximately 4.95% of the predictions made by the model are incorrect.
+
+The misclassification rate of the reduced model (4.95%) is slightly higher than the full model (4.85%).
+Given the nature of the data (stroke prediction), optimizing for the highest possible accuracy since false negatives (not predicting a stroke when one will occur) could have serious health consequences is preferrable.
+Therefore, since the full model provides a lower misclassification rate, it might be more suitable in this context, even if it is slightly more complex.
+
+Therefore, based on the similar misclassification rates and the advantage of simplicity, the reduced logistic regression model can be selected as the preferred model for predicting stroke occurrences thus far.
+
+In the upcoming sections, we'll explore other classification algorithms such as Linear Discriminant Analysis (LDA), Quadratic Discriminant Analysis (QDA), and Decision Tree algorithms.
+By comparing their respective accuracy and misclassification rates with the logistic regression model, we aim to identify the most suitable modeling approach for this problem.
+This iterative process of model selection and evaluation is crucial in ensuring we develop a model that provides the most reliable predictions possible for the incidence of stroke.
+
+### Linear discrimination Analysis
+
+### LDA assumptions test
+
+Before doing the LDA analysis, the data must satisfy two assumptions, the first one is normality and the second one is variance homogeneity (Just for LDA).
+Since we have more than one predictor we should check multivariate normality for both LDA and QDA approaches.
+The function fitted on the data in the posterior probability formula follow the normal distribution.
+That is why we should control this condition.
+
+The first test would be Mardia's Test in R.
+For categorical variables the concept of multivariate normality does not apply since the assumption of normality is specific to continuous varaibles.
+Hence, in this step we are just selecting the continouse predictions.
+
+```{r}
+#stroke_test
+#stroke_train
+#stroke_data
+# Subset dataset for all continous columns except id and stroke column
+subset_for_normality_test <- stroke_data[, which(names(stroke_data) %in% c("age", "avg_glucose_level","bmi"))]
+
+```
+
+Our first assumption should be the normality or in the case of having multiple predictors, the multivariate normality.
+
+H0 : The predictors follow a multivariate normal distribution.
+Ha : The predictors do not follow a multivariate normal distribution.
+
+```{r}
+#perform Multivariate normality test
+mult.norm(subset_for_normality_test)$mult.test
+```
+
+Both p-values for skewness and Kurtosis are less than 0.05.
+So, we should reject the null hypothesis.
+The multivariate normal is not met for the Mardia's Test.
+Let us use another test using the energy library:
+
+```{r}
+mvnorm.etest(subset_for_normality_test, R=50)
+```
+
+Based on the p-value obtained from 50 replicates, we have strong evidence against the null hypothesis.
+Therefore multivariate normality does not exist.
+It does not make sense to use normality tests for categorical variables in the dataset since they are not continuous.
+
+Now, we are going forward to create an LDA model, knowing the fact that the model assumptions are not satisfied.
+However, to compare the model accuracy with other methods we do that.
+
+The first step is converting the catgorical variables into proper numercial factors that can be put into the LDA formula
+
+```{r}
+#Converting categorical variables to factors for the trian set
+stroke_train$gender <- as.factor(stroke_train$gender)
+stroke_train$ever_married <- as.factor(stroke_train$ever_married)
+stroke_train$work_type <- as.factor(stroke_train$work_type)
+stroke_train$Residence_type <- as.factor(stroke_train$Residence_type)
+stroke_train$smoking_status <- as.factor(stroke_train$smoking_status)
+stroke_train$stroke <- as.factor(stroke_train$stroke)
+```
+
+```{r}
+#Making sure that r dummifies them correctly
+contrasts(stroke_train$smoking_status)
+```
+
+```{r}
+#LDA model
+LDA_model_1<-lda(stroke~., data = stroke_train)
+LDA_model_1
+```
+
+```{r}
+#Converting categorical variables to factors for the test set
+stroke_test$gender <- as.factor(stroke_test$gender)
+stroke_test$ever_married <- as.factor(stroke_test$ever_married)
+stroke_test$work_type <- as.factor(stroke_test$work_type)
+stroke_test$Residence_type <- as.factor(stroke_test$Residence_type)
+stroke_test$smoking_status <- as.factor(stroke_test$smoking_status)
+stroke_test$stroke <- as.factor(stroke_test$stroke)
+```
+
+```{r}
+#Making prediction
+LDA_pred_1=predict(LDA_model_1, stroke_test)
+#Calculating the misclassification error
+test_set_actual=stroke_test$stroke
+
+LDA_1_missclass_rate=mean(test_set_actual!=LDA_pred_1$class)*100
+cat("misclassification rate based on the first LDA model LDA:\n",LDA_1_missclass_rate,"%")
+```
+
+```{r}
+table(LDA_pred_1$class,stroke_test$stroke)
+```
+
+```{r}
+cat("misclassification rate based on the first LDA model LDA (table):\n",(50+7)/(973+1+7+50)*100,"%")
+```
+
+```{r}
+plot(LDA_model_1)
+```
+
+```{r}
+partimat(stroke ~ hypertension + age + bmi + avg_glucose_level,data=stroke_train,method="lda")
+```
+
+Although the misclassification percentage is a small number, we cannot say the model accuracy is good.
+This is because the number of strokes in the test data is naturally low (\~5.0%).
+So, based on the table of the predicted model, we can see that only 1 case of stroke (around 1% of the total strokes in the test set) were classified correctly.
+We can conclude that this LDA model is not appropriate for this data.
+
+#### QDA model
+
+In this part, we try the QDA model on two groups of variables.
+The first group contains only continuous variables, and the second one has all the variables except the work_type(since we got an error).
+
+```{r}
+qda_model_1<-qda(stroke~age+avg_glucose_level+bmi, data = stroke_train)
+qda_model_1
+```
+
+```{r}
+qda_class_1<-predict(qda_model_1, stroke_test)$class
+qda_misclass_rate_1=mean(stroke_test$stroke!=qda_class_1)*100
+cat("qda misclassification rate obtained from continous predictors:\n",qda_misclass_rate_1,"%")
+```
+
+```{r}
+qda_model_2<-qda(stroke~age+avg_glucose_level+bmi+hypertension+heart_disease+ever_married+Residence_type+smoking_status, data = stroke_train)
+qda_class_2<-predict(qda_model_2, stroke_test)$class
+qda_misclass_rate_2=mean(stroke_test$stroke!=qda_class_2)*100
+cat("qda misclassification rate obtained from continous predictors:\n",qda_misclass_rate_2,"%")
+```
+
+In the second model, we used all predictors except the work_type and the error is 12.60%.
+However, in the first model, which contains only continuous variables, the error is 6.30%.
+This shows inconsistency in the result, even in the qda model.
+There are two reasons for this.
+First, the continuous variable (age, BMI, avg_glucose_level) do not satisfy the Multivariate Normality tests.
+Second, the categorical variables do not well match for the LDA models, since the fitted function on the model is the normal distribution.
+
+The result from this part indicates that for this kind of dataset which holds both categorical and continuous variables, the methods such as a decision tree which does not have any normality or homogeneity assumptions, will show better results.
+
+### Cross Validation (Ashique)
+
+```{r}
+
+```
+
+### Decision Tree (Niloofar)
+
+```{r}
+
+```
+
+### Contingency Table
+
+```{r}
+
+```
+
+### Conclusion
+
+### Future Scope
+
+### Refrencess
+
+1.  Canada, P. H. A.
+    of.
+    (2022).
+    Stroke in Canada.
+    Government of Canada.
+    Retrieved from: <https://www.canada.ca/en/public-health/services/publications/diseases-conditions/stroke-in-canada.html>
+
+2.  World Stroke Organization.
+    (2023).
+    Learn about stroke.
+    Retrieved from: <https://www.world-stroke.org/world-stroke-day-campaign/why-stroke-matters/learn-about-stroke>
+
+3.  World Health Organization.
+    (2022).
+    World stroke day 2022.
+    Retrieved from: <https://www.who.int/srilanka/news/detail/29-10-2022-world-stroke-day-2022>
+
+4.  Kaggle.
+    (2021).
+    Stroke prediction dataset.
+    Retrieved from <https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset>
+
+5.  Zach.
+    (202).
+    Multivariate Normality Test in R.
+    Retrieved from <https://www.statology.org/multivariate-normality-test-r/>
+
+6.  R-Bloggers.
+    (2021).
+    Equality of Variances in R: Homogeneity Test Quick Guide.
+    Retrieved from <https://www.r-bloggers.com/2021/06/equality-of-variances-in-r-homogeneity-test-quick-guide/>
